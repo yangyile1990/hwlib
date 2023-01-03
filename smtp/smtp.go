@@ -121,7 +121,7 @@ var regMail = `<!DOCTYPE html>
         <div class="welcome_text">欢迎来到HuiOne机构，使用以下验证码确认注册。</div>
         <div class="verification_code_text">您的验证码</div>
         <div class="verification_code_num">#code</div>
-        <div class="explain_text">验证码的有效期为30分钟。请不要与任何人分享此代码。</div>
+        <div class="explain_text">验证码的有效期为5分钟。请不要与任何人分享此代码。</div>
         <div class="explain_text">如非您本人操作，请立即<div class="explain_text_red">联系客服</div>。</div>
         <div class="statement_text">本邮件由系统自动发送，请勿回复。</div>
     </div>

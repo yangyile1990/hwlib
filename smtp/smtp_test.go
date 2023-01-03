@@ -137,4 +137,11 @@ func TestXxx(t *testing.T) {
 		smtp.WithBodyReg("123456"),
 	)
 	fmt.Println(err)
+	err = cli.SendMail(
+		smtp.WithFrom("suiguo3564@gmail.com"),
+		smtp.WithTo("s_nikki@qq.com"),
+		smtp.WithTitle("测试邮件"),
+		smtp.WithBodyReg("654321"),
+	)
+	fmt.Println(err)
 }
