@@ -12,8 +12,27 @@ import (
 	"github.com/suiguo/hwlib/logger"
 )
 
+// To restart kafka after an upgrade:
+//
+//	brew services restart kafka
+//
+// Or, if you don't want/need a background service you can just run:
+//
+//	/opt/homebrew/opt/kafka/bin/kafka-server-start /opt/homebrew/etc/kafka/server.properties
 type KafkaType string
+type ConumerOffset string
 
+const (
+	Smallest  ConumerOffset = "smallest"
+	Earliest  ConumerOffset = "earliest"
+	Beginning ConumerOffset = "beginning"
+	Largest   ConumerOffset = "largest"
+	Latest    ConumerOffset = "latest"
+	End       ConumerOffset = "end"
+	Error     ConumerOffset = "error"
+)
+
+// , earliest, beginning, largest, latest, end, error
 const KafkaLogTag = "Kafka"
 const (
 	ALLType      KafkaType = "all"
@@ -22,7 +41,6 @@ const (
 )
 
 type KafkaMsg struct {
-	Topic     string
 	Partition int32
 	Offset    int64
 	Key       string
@@ -38,7 +56,7 @@ type Producer interface {
 }
 type Consumer interface {
 	MessageChan() <-chan *kafka.Message
-	Subscribe(...string) error
+	Subscribe(topics ...string) error
 }
 
 type kafkaClient struct {
@@ -66,15 +84,21 @@ func (k *kafkaClient) Produce(topic string, msg *KafkaMsg) error {
 	if msg.MetaData != "" {
 		topic_partition.Metadata = &msg.MetaData
 	}
-	if msg.Topic != "" {
-		topic_partition.Topic = &msg.Topic
+	if topic != "" {
+		topic_partition.Topic = &topic
 	}
-	topic_partition.Offset.Set(msg.Offset)
-	return k.producer.Produce(&kafka.Message{
+	if msg.Offset > 0 {
+		topic_partition.Offset.Set(msg.Offset)
+	}
+	tmp_msg := &kafka.Message{
 		TopicPartition: topic_partition,
-		Key:            []byte(msg.Key),
-		Value:          msg.Msg,
-	}, nil)
+		// Key:            []byte(msg.Key),
+		Value: msg.Msg,
+	}
+	if msg.Key != "" {
+		tmp_msg.Key = []byte(msg.Key)
+	}
+	return k.producer.Produce(tmp_msg, nil)
 }
 
 // run
@@ -85,17 +109,20 @@ func (k *kafkaClient) run() {
 				time.Sleep(time.Second * 2)
 			}
 			msg, err := k.consumer.ReadMessage(time.Second)
-			if err != nil {
+			if err != nil || msg == nil {
+				if err.(kafka.Error).Code() == kafka.ErrTimedOut {
+					continue
+				}
 				if k.Logger != nil {
 					k.Logger.Error(KafkaLogTag, "ReadMessage", err)
 				} else {
 					log.Println(KafkaLogTag, "ReadMessage", err)
 				}
-				time.Sleep(time.Second * 2)
+				continue
 			}
-			go func() {
-				k.msgPopChan <- msg
-			}()
+			go func(data *kafka.Message) {
+				k.msgPopChan <- data
+			}(msg)
 		}
 	})
 }
@@ -123,19 +150,24 @@ func GetKafkaByCfg(ktype KafkaType, consumer kafka.ConfigMap, producer kafka.Con
 	tmp.run()
 	return tmp, err
 }
-func GetDefaultKafka(ktype KafkaType, server string, group_id string, offset string, log logger.Logger) (KafaClient, error) {
+func GetDefaultKafka(ktype KafkaType, server string, group_id string, offset ConumerOffset, log logger.Logger) (KafaClient, error) {
 	tmp := &kafkaClient{
 		Logger:     log,
 		msgPopChan: make(chan *kafka.Message, 1000),
 	}
+	client_cfg := &kafka.ConfigMap{
+		"bootstrap.servers": server,
+		"group.id":          group_id,
+	}
+	if offset != "" {
+		client_cfg.SetKey("auto.offset.reset", string(offset))
+	} else {
+		client_cfg.SetKey("auto.offset.reset", "earliest")
+	}
 	var err error
 	switch ktype {
 	case ALLType:
-		tmp.consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
-			"bootstrap.servers": server,
-			"group.id":          group_id,
-			"auto.offset.reset": offset,
-		})
+		tmp.consumer, err = kafka.NewConsumer(client_cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -143,11 +175,7 @@ func GetDefaultKafka(ktype KafkaType, server string, group_id string, offset str
 			"bootstrap.servers": server,
 		})
 	case ConsumerType:
-		tmp.consumer, err = kafka.NewConsumer(&kafka.ConfigMap{
-			"bootstrap.servers": server,
-			"group.id":          group_id,
-			"auto.offset.reset": offset,
-		})
+		tmp.consumer, err = kafka.NewConsumer(client_cfg)
 	case ProducerType:
 		tmp.producer, err = kafka.NewProducer(&kafka.ConfigMap{
 			"bootstrap.servers": server,
@@ -156,6 +184,6 @@ func GetDefaultKafka(ktype KafkaType, server string, group_id string, offset str
 	if err != nil {
 		return nil, err
 	}
-	tmp.run()
+	go tmp.run()
 	return tmp, err
 }
