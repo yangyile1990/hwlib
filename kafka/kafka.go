@@ -7,7 +7,7 @@ import (
 
 	"log"
 
-	"github.com/confluentinc/confluent-kafka-go/kafka"
+	co_kafka "github.com/confluentinc/confluent-kafka-go/kafka"
 
 	"github.com/suiguo/hwlib/logger"
 )
@@ -55,16 +55,16 @@ type Producer interface {
 	Produce(topic string, msg *KafkaMsg) error
 }
 type Consumer interface {
-	MessageChan() <-chan *kafka.Message
+	MessageChan() <-chan *co_kafka.Message
 	Subscribe(topics ...string) error
 }
 
 type kafkaClient struct {
 	sync.Once
-	msgPopChan chan *kafka.Message
+	msgPopChan chan *co_kafka.Message
 	logger.Logger
-	producer *kafka.Producer
-	consumer *kafka.Consumer
+	producer *co_kafka.Producer
+	consumer *co_kafka.Consumer
 }
 
 func (k *kafkaClient) Subscribe(topics ...string) error {
@@ -73,14 +73,14 @@ func (k *kafkaClient) Subscribe(topics ...string) error {
 	}
 	return k.consumer.SubscribeTopics(topics, nil)
 }
-func (k *kafkaClient) MessageChan() <-chan *kafka.Message {
+func (k *kafkaClient) MessageChan() <-chan *co_kafka.Message {
 	return k.msgPopChan
 }
 func (k *kafkaClient) Produce(topic string, msg *KafkaMsg) error {
 	if k.producer == nil {
 		return fmt.Errorf("producer not init")
 	}
-	topic_partition := kafka.TopicPartition{}
+	topic_partition := co_kafka.TopicPartition{}
 	if msg.MetaData != "" {
 		topic_partition.Metadata = &msg.MetaData
 	}
@@ -90,7 +90,7 @@ func (k *kafkaClient) Produce(topic string, msg *KafkaMsg) error {
 	if msg.Offset > 0 {
 		topic_partition.Offset.Set(msg.Offset)
 	}
-	tmp_msg := &kafka.Message{
+	tmp_msg := &co_kafka.Message{
 		TopicPartition: topic_partition,
 		// Key:            []byte(msg.Key),
 		Value: msg.Msg,
@@ -110,7 +110,7 @@ func (k *kafkaClient) run() {
 			}
 			msg, err := k.consumer.ReadMessage(time.Second)
 			if err != nil || msg == nil {
-				if err.(kafka.Error).Code() == kafka.ErrTimedOut {
+				if err.(co_kafka.Error).Code() == co_kafka.ErrTimedOut {
 					continue
 				}
 				if k.Logger != nil {
@@ -120,29 +120,29 @@ func (k *kafkaClient) run() {
 				}
 				continue
 			}
-			go func(data *kafka.Message) {
+			go func(data *co_kafka.Message) {
 				k.msgPopChan <- data
 			}(msg)
 		}
 	})
 }
-func GetKafkaByCfg(ktype KafkaType, consumer kafka.ConfigMap, producer kafka.ConfigMap, log logger.Logger) (KafaClient, error) {
+func GetKafkaByCfg(ktype KafkaType, consumer co_kafka.ConfigMap, producer co_kafka.ConfigMap, log logger.Logger) (KafaClient, error) {
 	tmp := &kafkaClient{
 		Logger:     log,
-		msgPopChan: make(chan *kafka.Message, 1000),
+		msgPopChan: make(chan *co_kafka.Message, 1000),
 	}
 	var err error
 	switch ktype {
 	case ALLType:
-		tmp.consumer, err = kafka.NewConsumer(&consumer)
+		tmp.consumer, err = co_kafka.NewConsumer(&consumer)
 		if err != nil {
 			return nil, err
 		}
-		tmp.producer, err = kafka.NewProducer(&producer)
+		tmp.producer, err = co_kafka.NewProducer(&producer)
 	case ConsumerType:
-		tmp.consumer, err = kafka.NewConsumer(&consumer)
+		tmp.consumer, err = co_kafka.NewConsumer(&consumer)
 	case ProducerType:
-		tmp.producer, err = kafka.NewProducer(&producer)
+		tmp.producer, err = co_kafka.NewProducer(&producer)
 	}
 	if err != nil {
 		return nil, err
@@ -153,9 +153,9 @@ func GetKafkaByCfg(ktype KafkaType, consumer kafka.ConfigMap, producer kafka.Con
 func GetDefaultKafka(ktype KafkaType, server string, group_id string, offset ConumerOffset, log logger.Logger) (KafaClient, error) {
 	tmp := &kafkaClient{
 		Logger:     log,
-		msgPopChan: make(chan *kafka.Message, 1000),
+		msgPopChan: make(chan *co_kafka.Message, 1000),
 	}
-	client_cfg := &kafka.ConfigMap{
+	client_cfg := &co_kafka.ConfigMap{
 		"bootstrap.servers": server,
 		"group.id":          group_id,
 	}
@@ -167,17 +167,17 @@ func GetDefaultKafka(ktype KafkaType, server string, group_id string, offset Con
 	var err error
 	switch ktype {
 	case ALLType:
-		tmp.consumer, err = kafka.NewConsumer(client_cfg)
+		tmp.consumer, err = co_kafka.NewConsumer(client_cfg)
 		if err != nil {
 			return nil, err
 		}
-		tmp.producer, err = kafka.NewProducer(&kafka.ConfigMap{
+		tmp.producer, err = co_kafka.NewProducer(&co_kafka.ConfigMap{
 			"bootstrap.servers": server,
 		})
 	case ConsumerType:
-		tmp.consumer, err = kafka.NewConsumer(client_cfg)
+		tmp.consumer, err = co_kafka.NewConsumer(client_cfg)
 	case ProducerType:
-		tmp.producer, err = kafka.NewProducer(&kafka.ConfigMap{
+		tmp.producer, err = co_kafka.NewProducer(&co_kafka.ConfigMap{
 			"bootstrap.servers": server,
 		})
 	}
