@@ -11,17 +11,17 @@ func TestKafka(m *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	err = cli.Subscribe("topic_test")
-	if err != nil {
-		fmt.Println(err)
-	}
-	go func() {
-		data := cli.MessageChan()
-		for {
-			out_msg := <-data
-			fmt.Println(string(out_msg.Value))
-		}
-	}()
+	// err = cli.Subscribe("topic_test")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+	// go func() {
+	// 	data := cli.MessageChan()
+	// 	for {
+	// 		out_msg := <-data
+	// 		fmt.Println("msg===", string(out_msg.Value))
+	// 	}
+	// }()
 	number := 0
 	for {
 		time.Sleep(time.Second * 1)
