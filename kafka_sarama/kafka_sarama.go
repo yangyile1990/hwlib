@@ -117,33 +117,67 @@ func NewSarProducer(addrs []string, is_sync bool, log logger.Logger, cfg ...Prod
 //消费者
 
 type Consumer interface {
-	SubscribeTopics([]string, Handler)
-	Close() error
+	SubscribeTopics([]string, Handler) error
+	Close(topic string) error
 }
 type comsumer struct {
-	sarama.ConsumerGroup
-	log logger.Logger
+	addr  []string
+	group string
+	cfg   *sarama.Config
+	log   logger.Logger
 	context.Context
 	autoCommit bool
 	topics     sync.Map //map[string]Handler
 }
 type Handler func(topic string, partition int32, offset int64, msg []byte) error
+type topicHandler struct {
+	h Handler
+	sarama.ConsumerGroup
+}
 
-func (c *comsumer) SubscribeTopics(topic []string, h Handler) {
+func (c *comsumer) SubscribeTopics(topic []string, h Handler) error {
 	for _, val := range topic {
 		_, ok := c.topics.Load(val)
 		if !ok {
-			go func(t string) {
-				for {
-					err := c.Consume(c.Context, []string{t}, c)
+			client, err := sarama.NewClient(c.addr, c.cfg)
+			if err != nil {
+				return err
+			}
+			group_client, err := sarama.NewConsumerGroupFromClient(c.group, client)
+			if err != nil {
+				return err
+			}
+			go func() {
+				for err := range group_client.Errors() {
 					if c.log != nil {
 						c.log.Error(KafkaSaramaTag, "err", err)
 					}
 				}
-			}(val)
+			}()
+			go func(t string, cli sarama.ConsumerGroup) {
+				for {
+					err := cli.Consume(c.Context, []string{t}, c)
+					if c.log != nil {
+						c.log.Error(KafkaSaramaTag, "err", err)
+					}
+				}
+			}(val, group_client)
+			c.topics.Store(val, &topicHandler{h: h, ConsumerGroup: group_client})
 		}
-		c.topics.Store(val, h)
 	}
+	return nil
+}
+
+func (c *comsumer) Close(topic string) error {
+	cli, ok := c.topics.Load(topic)
+	if ok {
+		t, ok := cli.(sarama.ConsumerGroup)
+		if ok {
+			return t.Close()
+		}
+		return fmt.Errorf("cant conver to ConsumerGroup")
+	}
+	return nil
 }
 func (c *comsumer) Setup(_ sarama.ConsumerGroupSession) error {
 	return nil
@@ -155,8 +189,8 @@ func (c *comsumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.C
 	for msg := range claim.Messages() {
 		c.topics.Range(func(key, value any) bool {
 			if msg.Topic == key {
-				h := value.(Handler)
-				if h(msg.Topic, msg.Partition, msg.Offset, msg.Value) == nil {
+				h := value.(*topicHandler)
+				if h.h(msg.Topic, msg.Partition, msg.Offset, msg.Value) == nil {
 					if c.autoCommit {
 						sess.MarkMessage(msg, "")
 					} else {
@@ -209,22 +243,10 @@ func NewSarConsumer(addrs []string, group string, log logger.Logger, cfg ...Cons
 	}
 	config.Version = sarama.DefaultVersion //  V1_0_0_0
 	config.Consumer.Return.Errors = true
-	client, err := sarama.NewClient(addrs, config)
-	if err != nil {
-		return nil, err
-	}
-	group_client, err := sarama.NewConsumerGroupFromClient(group, client)
-	if err != nil {
-		return nil, err
-	}
-	go func() {
-		for err := range group_client.Errors() {
-			if log != nil {
-				log.Error(KafkaSaramaTag, "err", err)
-			}
-		}
-	}()
-	return &comsumer{ConsumerGroup: group_client,
+	return &comsumer{
+		group:      group,
+		addr:       addrs,
+		cfg:        config,
 		log:        log,
 		Context:    context.Background(),
 		autoCommit: config.Consumer.Offsets.AutoCommit.Enable,

@@ -29,7 +29,7 @@ func TestAsync(t *testing.T) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	p.SubscribeTopics([]string{"topic"}, func(topic string, partition int32, offset int64, msg []byte) error {
+	p.SubscribeTopics([]string{"topic0", "topic1", "topic2"}, func(topic string, partition int32, offset int64, msg []byte) error {
 		fmt.Println(topic, partition, offset, string(msg))
 		return nil
 	})
@@ -44,7 +44,7 @@ func TestAsync(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			k++
 			if k < 500 {
-				err = p.PushMsg("topic", fmt.Sprintf("hello%d", k))
+				err = p.PushMsg(fmt.Sprintf("topic%d", k%3), fmt.Sprintf("hello%d", k))
 				if err != nil {
 					fmt.Println(err)
 				}
