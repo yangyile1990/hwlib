@@ -13,7 +13,7 @@ import (
 const KafkaSaramaTag = "KafkaSarama"
 
 type Producer interface {
-	PushMsg(topic string, msg string) error
+	PushMsg(topic string, msg []byte) error
 	Close() error
 }
 
@@ -23,11 +23,11 @@ type syncproducer struct {
 	log logger.Logger
 }
 
-func (a *syncproducer) PushMsg(topic string, msg string) error {
+func (a *syncproducer) PushMsg(topic string, msg []byte) error {
 	if a.SyncProducer == nil {
 		return fmt.Errorf("SyncProducer is nil")
 	}
-	productMsg := &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(msg)}
+	productMsg := &sarama.ProducerMessage{Topic: topic, Value: sarama.ByteEncoder(msg)}
 	_, _, err := a.SendMessage(productMsg)
 	if err != nil {
 		if a.log != nil {
@@ -49,11 +49,11 @@ type asyncproducer struct {
 	log logger.Logger
 }
 
-func (a *asyncproducer) PushMsg(topic string, msg string) error {
+func (a *asyncproducer) PushMsg(topic string, msg []byte) error {
 	if a.AsyncProducer == nil {
 		return fmt.Errorf("SyncProducer is nil")
 	}
-	productMsg := &sarama.ProducerMessage{Topic: topic, Value: sarama.StringEncoder(msg)}
+	productMsg := &sarama.ProducerMessage{Topic: topic, Value: sarama.ByteEncoder(msg)}
 	select {
 	case a.AsyncProducer.Input() <- productMsg:
 		return nil

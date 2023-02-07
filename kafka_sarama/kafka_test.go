@@ -15,7 +15,7 @@ func TestXxx(t *testing.T) {
 		fmt.Println(err)
 	}
 	for i := 0; i < 100; i++ {
-		err = p.PushMsg("topic", "hello")
+		err = p.PushMsg("topic", []byte("hello"))
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -44,7 +44,7 @@ func TestAsync(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			k++
 			if k < 500 {
-				err = p.PushMsg(fmt.Sprintf("topic%d", k%3), fmt.Sprintf("hello%d", k))
+				err = p.PushMsg(fmt.Sprintf("topic%d", k%3), []byte(fmt.Sprintf("hello%d", k)))
 				if err != nil {
 					fmt.Println(err)
 				}
