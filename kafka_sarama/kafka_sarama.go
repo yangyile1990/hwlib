@@ -136,34 +136,39 @@ type topicHandler struct {
 }
 
 func (c *comsumer) SubscribeTopics(topic []string, h Handler) error {
+	str := ""
 	for _, val := range topic {
-		_, ok := c.topics.Load(val)
-		if !ok {
-			client, err := sarama.NewClient(c.addr, c.cfg)
-			if err != nil {
-				return err
-			}
-			group_client, err := sarama.NewConsumerGroupFromClient(c.group, client)
-			if err != nil {
-				return err
-			}
-			go func() {
-				for err := range group_client.Errors() {
-					if c.log != nil {
-						c.log.Error(KafkaSaramaTag, "err", err)
-					}
-				}
-			}()
-			go func(t string, cli sarama.ConsumerGroup) {
-				for {
-					err := cli.Consume(c.Context, []string{t}, c)
-					if c.log != nil {
-						c.log.Error(KafkaSaramaTag, "err", err)
-					}
-				}
-			}(val, group_client)
-			c.topics.Store(val, &topicHandler{h: h, ConsumerGroup: group_client})
+		str += fmt.Sprintf("[%s]", val)
+	}
+	if str == "" {
+		return fmt.Errorf("no topic")
+	}
+	_, ok := c.topics.Load(str)
+	if !ok {
+		client, err := sarama.NewClient(c.addr, c.cfg)
+		if err != nil {
+			return err
 		}
+		group_client, err := sarama.NewConsumerGroupFromClient(c.group, client)
+		if err != nil {
+			return err
+		}
+		go func() {
+			for err := range group_client.Errors() {
+				if c.log != nil {
+					c.log.Error(KafkaSaramaTag, "err", err)
+				}
+			}
+		}()
+		go func(t []string, cli sarama.ConsumerGroup) {
+			for {
+				err := cli.Consume(c.Context, t, c)
+				if c.log != nil {
+					c.log.Error(KafkaSaramaTag, "err", err)
+				}
+			}
+		}(topic, group_client)
+		c.topics.Store(str, &topicHandler{h: h, ConsumerGroup: group_client})
 	}
 	return nil
 }
