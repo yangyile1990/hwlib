@@ -3,6 +3,7 @@ package kafkasarama
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -193,7 +194,8 @@ func (c *comsumer) Cleanup(_ sarama.ConsumerGroupSession) error {
 func (c *comsumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for msg := range claim.Messages() {
 		c.topics.Range(func(key, value any) bool {
-			if msg.Topic == key {
+			k := key.(string)
+			if strings.Contains(k, fmt.Sprintf("[%s]", msg.Topic)) {
 				h := value.(*topicHandler)
 				if h.h(msg.Topic, msg.Partition, msg.Offset, msg.Value) == nil {
 					if c.autoCommit {
