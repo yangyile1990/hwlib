@@ -3,6 +3,7 @@ package ecies
 import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -201,4 +202,72 @@ func toECDSA(d []byte, strict bool) (*ecdsa.PrivateKey, error) {
 		return nil, errors.New("invalid private key")
 	}
 	return pk, nil
+}
+
+func GenKey() (pub string, pri string, generror error) {
+	prv1, err := GenerateKey(rand.Reader, elliptic.P256(), nil)
+	if err != nil {
+		return "", "", fmt.Errorf(err.Msg())
+	}
+	return prv1.PublicKey.String(), prv1.String(), nil
+}
+
+type EncryptTool interface {
+	ECCEncrypt(msg []byte) ([]byte, error)
+}
+type DecryptTool interface {
+	ECCDecrypt(msg []byte) ([]byte, error)
+}
+type en_tool struct {
+	pub *PublicKey
+}
+
+func (e *en_tool) ECCEncrypt(msg []byte) ([]byte, error) {
+	if e.pub == nil {
+		return nil, fmt.Errorf("pub key is nil")
+	}
+	out, err := Encrypt(rand.Reader, e.pub, msg, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf(err.Msg())
+	}
+	return out, nil
+}
+
+// 获取一个加密
+func EnTool(pubstr string) (EncryptTool, error) {
+	pub, err := PublicFromString(pubstr)
+	if err != nil {
+		return nil, fmt.Errorf(err.Msg())
+	}
+	if pub == nil {
+		return nil, fmt.Errorf("pub is nil")
+	}
+	return &en_tool{pub: pub}, nil
+}
+
+// 获取一个解密
+func DeTool(pristr string) (DecryptTool, error) {
+	pri, err := PrivateFromString(pristr)
+	if err != nil {
+		return nil, fmt.Errorf(err.Msg())
+	}
+	if pri == nil {
+		return nil, fmt.Errorf("pri is nil")
+	}
+	return &de_tool{pri: pri}, nil
+}
+
+type de_tool struct {
+	pri *PrivateKey
+}
+
+func (d *de_tool) ECCDecrypt(msg []byte) ([]byte, error) {
+	if d.pri == nil {
+		return nil, fmt.Errorf("pri is nil")
+	}
+	pt, err := d.pri.Decrypt(msg, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf(err.Msg())
+	}
+	return pt, nil
 }
