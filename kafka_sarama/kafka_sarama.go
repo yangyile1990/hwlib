@@ -90,6 +90,11 @@ func WithProductReTryTimes(max int) ProductConfig {
 		c.Producer.Retry.Max = max
 	}
 }
+func WithProductVersion(version sarama.KafkaVersion) ProductConfig {
+	return func(c *sarama.Config) {
+		c.Version = version
+	}
+}
 
 // 地址  是否是同步 配置
 func NewSarProducer(addrs []string, is_sync bool, log logger.Logger, cfg ...ProductConfig) (Producer, error) {
@@ -239,6 +244,11 @@ const (
 func WithConsumerOffsets(i OffsetType) ConsumerConfig {
 	return func(c *sarama.Config) {
 		c.Consumer.Offsets.Initial = int64(i)
+	}
+}
+func WithConsumerVerson(version sarama.KafkaVersion) ConsumerConfig {
+	return func(c *sarama.Config) {
+		c.Version = version
 	}
 }
 
