@@ -69,39 +69,40 @@ func (a *asyncproducer) Close() error {
 	return nil
 }
 
-type ProductConfig func(*sarama.Config)
+// type ProductConfig func(*sarama.Config)
 
 // ack
-func WithProductAcks(ack sarama.RequiredAcks) ProductConfig {
+func WithProductAcks(ack sarama.RequiredAcks) Config {
 	return func(c *sarama.Config) {
 		c.Producer.RequiredAcks = ack
 	}
 }
 
 // 超时
-func WithProductTimeOut(t time.Duration) ProductConfig {
+func WithProductTimeOut(t time.Duration) Config {
 	return func(c *sarama.Config) {
 		c.Producer.Timeout = t
 	}
 }
 
-func WithProductReTryTimes(max int) ProductConfig {
+func WithProductReTryTimes(max int) Config {
 	return func(c *sarama.Config) {
 		c.Producer.Retry.Max = max
 	}
 }
-func WithProductVersion(version sarama.KafkaVersion) ProductConfig {
+func WithVersion(version sarama.KafkaVersion) Config {
 	return func(c *sarama.Config) {
 		c.Version = version
 	}
 }
 
 // 地址  是否是同步 配置
-func NewSarProducer(addrs []string, is_sync bool, log logger.Logger, cfg ...ProductConfig) (Producer, error) {
+func NewSarProducer(addrs []string, is_sync bool, log logger.Logger, cfg ...Config) (Producer, error) {
 	config := sarama.NewConfig()
 	for _, c := range cfg {
 		c(config)
 	}
+	// config.Net.SASL.
 	if is_sync {
 		config.Producer.Return.Successes = true
 		p, err := sarama.NewSyncProducer(addrs, config)
@@ -118,6 +119,13 @@ func NewSarProducer(addrs []string, is_sync bool, log logger.Logger, cfg ...Prod
 	}
 	// sarama.ConsumerMessage
 	return nil, err
+}
+func WithSASLAuth(user string, pwd string) Config {
+	return func(c *sarama.Config) {
+		c.Net.SASL.Enable = true
+		c.Net.SASL.User = user
+		c.Net.SASL.Password = pwd
+	}
 }
 
 //消费者
@@ -220,15 +228,15 @@ func (c *comsumer) ConsumeClaim(sess sarama.ConsumerGroupSession, claim sarama.C
 // 	return c.Close()
 // }
 
-type ConsumerConfig func(*sarama.Config)
+type Config func(*sarama.Config)
 
-func WithConsumerAutoCommit(is_auto bool) ConsumerConfig {
+func WithConsumerAutoCommit(is_auto bool) Config {
 	return func(c *sarama.Config) {
 		c.Consumer.Offsets.AutoCommit.Enable = is_auto
 	}
 }
 
-func WithConsumerAutoInterval(Interval time.Duration) ConsumerConfig {
+func WithConsumerAutoInterval(Interval time.Duration) Config {
 	return func(c *sarama.Config) {
 		c.Consumer.Offsets.AutoCommit.Interval = Interval
 	}
@@ -241,24 +249,18 @@ const (
 	OffsetNewest OffsetType = OffsetType(sarama.OffsetNewest)
 )
 
-func WithConsumerOffsets(i OffsetType) ConsumerConfig {
+func WithConsumerOffsets(i OffsetType) Config {
 	return func(c *sarama.Config) {
 		c.Consumer.Offsets.Initial = int64(i)
 	}
 }
-func WithConsumerVerson(version sarama.KafkaVersion) ConsumerConfig {
-	return func(c *sarama.Config) {
-		c.Version = version
-	}
-}
 
-func NewSarConsumer(addrs []string, group string, log logger.Logger, cfg ...ConsumerConfig) (Consumer, error) {
+func NewSarConsumer(addrs []string, group string, log logger.Logger, cfg ...Config) (Consumer, error) {
 	config := sarama.NewConfig()
 	// config.Consumer.Offsets.AutoCommit.Enable = false
 	for _, c := range cfg {
 		c(config)
 	}
-	config.Version = sarama.DefaultVersion //  V1_0_0_0
 	config.Consumer.Return.Errors = true
 	return &comsumer{
 		group:      group,
