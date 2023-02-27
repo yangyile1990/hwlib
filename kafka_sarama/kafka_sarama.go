@@ -11,6 +11,13 @@ import (
 	"github.com/suiguo/hwlib/logger"
 )
 
+type Algorithm string
+
+const (
+	SHA_256 Algorithm = "sha256"
+	SHA_512 Algorithm = "sha512"
+)
+
 const KafkaSaramaTag = "KafkaSarama"
 
 type Producer interface {
@@ -120,11 +127,27 @@ func NewSarProducer(addrs []string, is_sync bool, log logger.Logger, cfg ...Conf
 	// sarama.ConsumerMessage
 	return nil, err
 }
-func WithSASLAuth(user string, pwd string) Config {
-	return func(c *sarama.Config) {
-		c.Net.SASL.Enable = true
-		c.Net.SASL.User = user
-		c.Net.SASL.Password = pwd
+func WithSASLAuth(user string, pwd string, algorithm Algorithm) Config {
+	return func(conf *sarama.Config) {
+		conf.Net.SASL.Enable = true
+		conf.Net.SASL.User = user
+		conf.Net.SASL.Password = pwd
+		conf.Net.SASL.Handshake = true
+		if algorithm == SHA_256 {
+			conf.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &xDGSCRAMClient{HashGeneratorFcn: sHA512} }
+			conf.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+		} else if algorithm == SHA_512 {
+			conf.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &xDGSCRAMClient{HashGeneratorFcn: sHA256} }
+			conf.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+		}
+	}
+}
+
+// , useTLS bool
+func WithTls(certFile string, keyFile string, caFile string, skip bool) Config {
+	return func(cfg *sarama.Config) {
+		cfg.Net.TLS.Enable = true
+		cfg.Net.TLS.Config = createTLSConfiguration(certFile, keyFile, caFile, skip)
 	}
 }
 
