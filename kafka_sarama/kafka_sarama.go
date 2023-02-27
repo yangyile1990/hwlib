@@ -129,16 +129,18 @@ func NewSarProducer(addrs []string, is_sync bool, log logger.Logger, cfg ...Conf
 }
 func WithSASLAuth(user string, pwd string, algorithm Algorithm) Config {
 	return func(conf *sarama.Config) {
-		conf.Net.SASL.Enable = true
-		conf.Net.SASL.User = user
-		conf.Net.SASL.Password = pwd
-		conf.Net.SASL.Handshake = true
-		if algorithm == SHA_256 {
-			conf.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &xDGSCRAMClient{HashGeneratorFcn: sHA512} }
-			conf.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
-		} else if algorithm == SHA_512 {
-			conf.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &xDGSCRAMClient{HashGeneratorFcn: sHA256} }
-			conf.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+		if user != "" && pwd != "" {
+			conf.Net.SASL.Enable = true
+			conf.Net.SASL.User = user
+			conf.Net.SASL.Password = pwd
+			conf.Net.SASL.Handshake = true
+			if algorithm == SHA_256 {
+				conf.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &xDGSCRAMClient{HashGeneratorFcn: sHA512} }
+				conf.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA512
+			} else if algorithm == SHA_512 {
+				conf.Net.SASL.SCRAMClientGeneratorFunc = func() sarama.SCRAMClient { return &xDGSCRAMClient{HashGeneratorFcn: sHA256} }
+				conf.Net.SASL.Mechanism = sarama.SASLTypeSCRAMSHA256
+			}
 		}
 	}
 }
