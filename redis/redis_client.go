@@ -79,6 +79,7 @@ func GetInstance(log logger.Logger, cfg *RedisCfg) (*Client, error) {
 	var tls *tls.Config
 	if cfg.TlsCfg != nil {
 		tls = createTLSConfiguration(cfg.TlsCfg.CertFile, cfg.TlsCfg.KeyFile, cfg.TlsCfg.CertFile, cfg.TlsCfg.Skip)
+		tls.ServerName = cfg.Host
 	}
 	if key, err := json.Marshal(cfg); err == nil {
 		redis_lock.RLock()
