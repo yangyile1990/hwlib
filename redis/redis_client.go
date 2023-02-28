@@ -1,8 +1,12 @@
 package redis
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -15,6 +19,33 @@ import (
 var instanceMap = make(map[string]*Client)
 var redis_lock sync.RWMutex
 
+func createTLSConfiguration(certFile string, keyFile string, caFile string, skip bool) (t *tls.Config) {
+	t = &tls.Config{
+		InsecureSkipVerify: skip,
+	}
+	if certFile != "" && keyFile != "" && caFile != "" {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		caCert, err := os.ReadFile(caFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(caCert)
+
+		t = &tls.Config{
+			Certificates:       []tls.Certificate{cert},
+			RootCAs:            caCertPool,
+			InsecureSkipVerify: skip,
+		}
+	}
+	return t
+}
+
 // Client is for
 type Client struct {
 	Cc  *redis.Client
@@ -23,11 +54,19 @@ type Client struct {
 
 const ResultNil = redis.Nil
 
+type TlsCfg struct {
+	CertFile string `json:"cert_file"`
+	KeyFile  string `json:"key_file"`
+	CaFile   string `json:"ca_file"`
+	Skip     bool   `json:"skip"`
+	// certFile string, keyFile string, caFile string, skip bool
+}
 type RedisCfg struct {
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Dbname   int    `json:"dbname"`
-	PassWord string `json:"pwd"`
+	Host     string  `json:"host"`
+	Port     int     `json:"port"`
+	Dbname   int     `json:"dbname"`
+	PassWord string  `json:"pwd"`
+	TlsCfg   *TlsCfg `json:"tls"`
 }
 
 func GetInstance(log logger.Logger, cfg *RedisCfg) (*Client, error) {
@@ -37,17 +76,30 @@ func GetInstance(log logger.Logger, cfg *RedisCfg) (*Client, error) {
 	if log == nil {
 		log = logger.NewStdLogger()
 	}
+	var tls *tls.Config
+	if cfg.TlsCfg != nil {
+		tls = createTLSConfiguration(cfg.TlsCfg.CertFile, cfg.TlsCfg.KeyFile, cfg.TlsCfg.CertFile, cfg.TlsCfg.Skip)
+	}
 	if key, err := json.Marshal(cfg); err == nil {
 		redis_lock.RLock()
 		r := instanceMap[string(key)]
 		redis_lock.RUnlock()
 		if r == nil {
-			rdb := redis.NewClient(&redis.Options{
-				Addr:     cfg.Host + ":" + strconv.Itoa(cfg.Port),
-				Password: cfg.PassWord, // no password set
-				DB:       cfg.Dbname,   // use default DB
-
-			})
+			var rdb *redis.Client
+			if tls != nil {
+				rdb = redis.NewClient(&redis.Options{
+					Addr:      cfg.Host + ":" + strconv.Itoa(cfg.Port),
+					Password:  cfg.PassWord, // no password set
+					DB:        cfg.Dbname,   // use default DB
+					TLSConfig: tls,
+				})
+			} else {
+				rdb = redis.NewClient(&redis.Options{
+					Addr:     cfg.Host + ":" + strconv.Itoa(cfg.Port),
+					Password: cfg.PassWord, // no password set
+					DB:       cfg.Dbname,   // use default DB
+				})
+			}
 			errors := rdb.Ping().Err()
 			if errors != nil {
 				return nil, errors
