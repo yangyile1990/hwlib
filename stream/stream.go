@@ -1,13 +1,14 @@
 package stream
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/suiguo/hwlib/logger"
 	redis_cli "github.com/suiguo/hwlib/redis"
 
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 )
 
 var s *StreamClient
@@ -38,10 +39,10 @@ func (s *StreamClient) Run(streamkey string, group string, consumer string, log 
 	if s == nil || s.cli == nil {
 		return fmt.Errorf("stream run error")
 	}
-	s.cli.Cc.XGroupCreateMkStream(streamkey, group, "0")
+	s.cli.Cc.XGroupCreateMkStream(context.Background(), streamkey, group, "0")
 	go func() {
 		for {
-			r, err := s.cli.Cc.XReadGroup(&redis.XReadGroupArgs{
+			r, err := s.cli.Cc.XReadGroup(context.Background(), &redis.XReadGroupArgs{
 				Group:    group,
 				Consumer: consumer,
 				Count:    10,
@@ -65,7 +66,7 @@ func (s *StreamClient) Run(streamkey string, group string, consumer string, log 
 						ev_name, ok2 := event_name.(string)
 						if ok && ok2 {
 							if h != nil && h(stream_name, ev_name, s_data.Values) {
-								s.cli.Cc.XAck(streamkey, group, s_data.ID)
+								s.cli.Cc.XAck(context.Background(), streamkey, group, s_data.ID)
 							}
 						}
 					}

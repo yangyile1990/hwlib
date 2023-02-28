@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -13,7 +14,7 @@ import (
 
 	"github.com/suiguo/hwlib/logger"
 
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 )
 
 var instanceMap = make(map[string]*Client)
@@ -62,6 +63,7 @@ type TlsCfg struct {
 	// certFile string, keyFile string, caFile string, skip bool
 }
 type RedisCfg struct {
+	UserName string  `json:"user_name"`
 	Host     string  `json:"host"`
 	Port     int     `json:"port"`
 	Dbname   int     `json:"dbname"`
@@ -90,6 +92,7 @@ func GetInstance(log logger.Logger, cfg *RedisCfg) (*Client, error) {
 			if tls != nil {
 				rdb = redis.NewClient(&redis.Options{
 					Addr:      cfg.Host + ":" + strconv.Itoa(cfg.Port),
+					Username:  cfg.UserName,
 					Password:  cfg.PassWord, // no password set
 					DB:        cfg.Dbname,   // use default DB
 					TLSConfig: tls,
@@ -97,11 +100,12 @@ func GetInstance(log logger.Logger, cfg *RedisCfg) (*Client, error) {
 			} else {
 				rdb = redis.NewClient(&redis.Options{
 					Addr:     cfg.Host + ":" + strconv.Itoa(cfg.Port),
+					Username: cfg.UserName,
 					Password: cfg.PassWord, // no password set
 					DB:       cfg.Dbname,   // use default DB
 				})
 			}
-			errors := rdb.Ping().Err()
+			errors := rdb.Ping(context.Background()).Err()
 			if errors != nil {
 				return nil, errors
 			}
@@ -120,104 +124,104 @@ func GetInstance(log logger.Logger, cfg *RedisCfg) (*Client, error) {
 }
 
 // EXPIRE is for
-func (c *Client) EXPIRE(key string, dur time.Duration) error {
+func (c *Client) EXPIRE(ctx context.Context, key string, dur time.Duration) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	c.Cc.Expire(key, dur)
+	c.Cc.Expire(ctx, key, dur)
 	return nil
 }
 
-func (c *Client) SPOP(key string) (string, error) {
+func (c *Client) SPOP(ctx context.Context, key string) (string, error) {
 	if c == nil || c.Cc == nil {
 		return "", fmt.Errorf("redis not init")
 	}
-	return c.Cc.SPop(key).Result()
+	return c.Cc.SPop(ctx, key).Result()
 }
 
 // SADD is for
-func (c *Client) SADD(key string, values ...interface{}) error {
+func (c *Client) SADD(ctx context.Context, key string, values ...interface{}) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	return c.Cc.SAdd(key, values...).Err()
+	return c.Cc.SAdd(ctx, key, values...).Err()
 }
 
 // SREM is for
-func (c *Client) SREM(key string, values ...interface{}) error {
+func (c *Client) SREM(ctx context.Context, key string, values ...interface{}) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	return c.Cc.SRem(key, values...).Err()
+	return c.Cc.SRem(ctx, key, values...).Err()
 }
 
 // SMEMBERS is ofr
-func (c *Client) SMEMBERS(key string) ([]string, error) {
+func (c *Client) SMEMBERS(ctx context.Context, key string) ([]string, error) {
 	if c == nil || c.Cc == nil {
 		return []string{}, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.SMembers(key).Result()
+	return c.Cc.SMembers(ctx, key).Result()
 }
 
 // BLPOP is for
-func (c *Client) BLPOP(key string, t time.Duration) ([]string, error) {
+func (c *Client) BLPOP(ctx context.Context, key string, t time.Duration) ([]string, error) {
 	if c == nil || c.Cc == nil {
 		return []string{}, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.BLPop(t, key).Result()
+	return c.Cc.BLPop(ctx, t, key).Result()
 }
 
 // RPUSH is for
-func (c *Client) RPUSH(key string, value ...interface{}) (int64, error) {
+func (c *Client) RPUSH(ctx context.Context, key string, value ...interface{}) (int64, error) {
 	if c == nil || c.Cc == nil {
 		return 0, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.RPush(key, value).Result()
+	return c.Cc.RPush(ctx, key, value).Result()
 }
 
 // RPUSH is for
-func (c *Client) LRANGE(key string, start, stop int64) ([]string, error) {
+func (c *Client) LRANGE(ctx context.Context, key string, start, stop int64) ([]string, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.LRange(key, start, stop).Result()
+	return c.Cc.LRange(ctx, key, start, stop).Result()
 }
 
 // SET is for
-func (c *Client) SET(key string, value interface{}, t time.Duration) (string, error) {
+func (c *Client) SET(ctx context.Context, key string, value interface{}, t time.Duration) (string, error) {
 	if c == nil || c.Cc == nil {
 		return "", fmt.Errorf("redis not init ")
 	}
-	return c.Cc.Set(key, value, t).Result()
+	return c.Cc.Set(ctx, key, value, t).Result()
 }
 
 // SETNX is for
-func (c *Client) SETNX(key string, value interface{}, t time.Duration) (bool, error) {
+func (c *Client) SETNX(ctx context.Context, key string, value interface{}, t time.Duration) (bool, error) {
 	if c == nil || c.Cc == nil {
 		return false, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.SetNX(key, value, t).Result()
+	return c.Cc.SetNX(ctx, key, value, t).Result()
 }
 
 // DEL is for
-func (c *Client) DEL(key ...string) (int64, error) {
+func (c *Client) DEL(ctx context.Context, key ...string) (int64, error) {
 	if c == nil || c.Cc == nil {
 		return 0, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.Del(key...).Result()
+	return c.Cc.Del(ctx, key...).Result()
 }
 
 // GET is for
-func (c *Client) GET(key string) (string, error) {
+func (c *Client) GET(ctx context.Context, key string) (string, error) {
 	if c == nil || c.Cc == nil {
 		return "", fmt.Errorf("redis not init ")
 	}
-	return c.Cc.Get(key).Result()
+	return c.Cc.Get(ctx, key).Result()
 }
 
 // XADDJSON is for add message to stream, if stream not exist, stream will create.
 // XADDJSON will format all interface{} value to json str.
-func (c *Client) XADDJSON(stream string, vals map[string]interface{}) error {
+func (c *Client) XADDJSON(ctx context.Context, stream string, vals map[string]interface{}) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
@@ -230,63 +234,63 @@ func (c *Client) XADDJSON(stream string, vals map[string]interface{}) error {
 		Stream: stream,
 		Values: vals,
 	}
-	stat := c.Cc.XAdd(&xargs)
+	stat := c.Cc.XAdd(ctx, &xargs)
 	return stat.Err()
 }
 
 // XADD interface{} value is only support string and numeric value.
-func (c *Client) XADD(stream, id string, maxlen int64, vals map[string]interface{}) error {
+func (c *Client) XADD(ctx context.Context, stream, id string, maxlen int64, vals map[string]interface{}) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
 	xargs := redis.XAddArgs{
-		Stream:       stream,
-		ID:           id,
-		MaxLenApprox: maxlen,
-		Values:       vals,
+		Stream: stream,
+		ID:     id,
+		MaxLen: maxlen,
+		Values: vals,
 	}
-	stat := c.Cc.XAdd(&xargs)
+	stat := c.Cc.XAdd(ctx, &xargs)
 	return stat.Err()
 }
 
 // XGROUP_CREATE create consumer group.
-func (c *Client) XGROUP_CREATE(stream, group, start string) (string, error) {
+func (c *Client) XGROUP_CREATE(ctx context.Context, stream, group, start string) (string, error) {
 	if c == nil || c.Cc == nil {
 		return "", fmt.Errorf("redis not init ")
 	}
-	stat := c.Cc.XGroupCreate(stream, group, start)
+	stat := c.Cc.XGroupCreate(ctx, stream, group, start)
 	return stat.Result()
 }
 
 // XGROUP_DELETE delete consumer group.
-func (c *Client) XGROUP_DELETE(stream, group string) error {
+func (c *Client) XGROUP_DELETE(ctx context.Context, stream, group string) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	stat := c.Cc.XGroupDestroy(stream, group)
+	stat := c.Cc.XGroupDestroy(ctx, stream, group)
 	return stat.Err()
 }
 
 // XGROUP_SETID modify consumer group start.
-func (c *Client) XGROUP_SETID(stream, group, start string) error {
+func (c *Client) XGROUP_SETID(ctx context.Context, stream, group, start string) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	stat := c.Cc.XGroupSetID(stream, group, start)
+	stat := c.Cc.XGroupSetID(ctx, stream, group, start)
 	return stat.Err()
 }
 
 // XGROUP_DELCONSUMER delete consumer from group.
-func (c *Client) XGROUP_DELCONSUMER(stream, group, consumer string) error {
+func (c *Client) XGROUP_DELCONSUMER(ctx context.Context, stream, group, consumer string) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	stat := c.Cc.XGroupDelConsumer(stream, group, consumer)
+	stat := c.Cc.XGroupDelConsumer(ctx, stream, group, consumer)
 	return stat.Err()
 }
 
 // XGROUP_READ is for read message from stream
-func (c *Client) XGROUP_READ(stream, group, consumer, start string, count int64, timeout time.Duration, noAck bool, jsonDecode bool) (*map[string]map[string]interface{}, error) {
+func (c *Client) XGROUP_READ(ctx context.Context, stream, group, consumer, start string, count int64, timeout time.Duration, noAck bool, jsonDecode bool) (*map[string]map[string]interface{}, error) {
 	rgArgs := redis.XReadGroupArgs{
 		Group:    group,
 		Consumer: consumer,
@@ -296,7 +300,7 @@ func (c *Client) XGROUP_READ(stream, group, consumer, start string, count int64,
 		Block:   timeout,
 		NoAck:   noAck,
 	}
-	stat := c.Cc.XReadGroup(&rgArgs)
+	stat := c.Cc.XReadGroup(ctx, &rgArgs)
 	err := stat.Err()
 	if err != nil {
 		return nil, err
@@ -327,7 +331,7 @@ func (c *Client) XGROUP_READ(stream, group, consumer, start string, count int64,
 }
 
 // XPENDING_SCAN is for read message only received not ack.
-func (c *Client) XPENDING_SCAN(stream, group, consumer, start, end string, count int64) (*map[string]map[string]interface{}, error) {
+func (c *Client) XPENDING_SCAN(ctx context.Context, stream, group, consumer, start, end string, count int64) (*map[string]map[string]interface{}, error) {
 	rgArgs := redis.XPendingExtArgs{
 		Stream:   stream,
 		Group:    group,
@@ -336,7 +340,7 @@ func (c *Client) XPENDING_SCAN(stream, group, consumer, start, end string, count
 		Count:    count,
 		Consumer: consumer,
 	}
-	stat := c.Cc.XPendingExt(&rgArgs)
+	stat := c.Cc.XPendingExt(ctx, &rgArgs)
 	err := stat.Err()
 	if err != nil {
 		return nil, err
@@ -351,29 +355,29 @@ func (c *Client) XPENDING_SCAN(stream, group, consumer, start, end string, count
 		tmp["consumer"] = stream.Consumer
 		tmp["idle"] = stream.Idle
 		tmp["retryCount"] = stream.RetryCount
-		result[stream.Id] = tmp
+		result[stream.ID] = tmp
 	}
 	return &result, nil
 }
 
 // XACK ack target message.
-func (c *Client) XACK(stream, group string, ids ...string) error {
+func (c *Client) XACK(ctx context.Context, stream, group string, ids ...string) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	stat := c.Cc.XAck(stream, group, ids...)
+	stat := c.Cc.XAck(ctx, stream, group, ids...)
 	return stat.Err()
 }
 
 // XINFO_GROUPS is for get stream group info
-func (c *Client) XINFO_GROUPS(stream string) (*map[string]map[string]interface{}, error) {
+func (c *Client) XINFO_GROUPS(ctx context.Context, stream string) (*map[string]map[string]interface{}, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
 	args := []interface{}{"xinfo", "groups"}
 	args = append(args, stream)
-	cmd := redis.NewSliceCmd(args...)
-	err := c.Cc.Process(cmd)
+	cmd := redis.NewSliceCmd(ctx, args...)
+	err := c.Cc.Process(ctx, cmd)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +406,7 @@ func (c *Client) XINFO_GROUPS(stream string) (*map[string]map[string]interface{}
 }
 
 // XCLAIM reclaim pending message to target consumer.
-func (c *Client) XCLAIM(stream, group, consumer string, minIdle time.Duration, ids ...string) error {
+func (c *Client) XCLAIM(ctx context.Context, stream, group, consumer string, minIdle time.Duration, ids ...string) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
@@ -413,70 +417,70 @@ func (c *Client) XCLAIM(stream, group, consumer string, minIdle time.Duration, i
 		MinIdle:  minIdle,
 		Messages: ids,
 	}
-	stat := c.Cc.XClaim(&rgArgs)
+	stat := c.Cc.XClaim(ctx, &rgArgs)
 	return stat.Err()
 }
 
 // HGET is for
-func (c *Client) HGET(key string, field string) (string, error) {
+func (c *Client) HGET(ctx context.Context, key string, field string) (string, error) {
 	if c == nil || c.Cc == nil {
 		return "", fmt.Errorf("redis not init ")
 	}
-	return c.Cc.HGet(key, field).Result()
+	return c.Cc.HGet(ctx, key, field).Result()
 }
 
 // HGETALL is for
-func (c *Client) HGETALL(key string) (map[string]string, error) {
+func (c *Client) HGETALL(ctx context.Context, key string) (map[string]string, error) {
 	if c == nil || c.Cc == nil {
 		return map[string]string{}, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.HGetAll(key).Result()
+	return c.Cc.HGetAll(ctx, key).Result()
 }
 
 // HSET is for
-func (c *Client) HSET(name string, key string, value interface{}) error {
+func (c *Client) HSET(ctx context.Context, name string, key string, value interface{}) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	return c.Cc.HSet(name, key, value).Err()
+	return c.Cc.HSet(ctx, name, key, value).Err()
 }
 
 // HMGET is for
-func (c *Client) HMGET(name string, keys ...string) ([]interface{}, error) {
+func (c *Client) HMGET(ctx context.Context, name string, keys ...string) ([]interface{}, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.HMGet(name, keys...).Result()
+	return c.Cc.HMGet(ctx, name, keys...).Result()
 }
 
 // HMSET is for
-func (c *Client) HMSET(name string, kv map[string]interface{}) error {
+func (c *Client) HMSET(ctx context.Context, name string, kv map[string]interface{}) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	return c.Cc.HMSet(name, kv).Err()
+	return c.Cc.HMSet(ctx, name, kv).Err()
 }
 
 // HGET is for
-func (c *Client) HDEL(key string, field string) (int64, error) {
+func (c *Client) HDEL(ctx context.Context, key string, field string) (int64, error) {
 	if c == nil || c.Cc == nil {
 		return 0, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.HDel(key, field).Result()
+	return c.Cc.HDel(ctx, key, field).Result()
 }
 
-func (c *Client) HEXISTS(key string, field string) (bool, error) {
+func (c *Client) HEXISTS(ctx context.Context, key string, field string) (bool, error) {
 	if c == nil || c.Cc == nil {
 		return false, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.HExists(key, field).Result()
+	return c.Cc.HExists(ctx, key, field).Result()
 }
 
-func (c *Client) EXISTS(key string) (bool, error) {
+func (c *Client) EXISTS(ctx context.Context, key string) (bool, error) {
 	if c == nil || c.Cc == nil {
 		return false, fmt.Errorf("redis not init ")
 	}
-	r, err := c.Cc.Exists(key).Result()
+	r, err := c.Cc.Exists(ctx, key).Result()
 	if err != nil {
 		return false, err
 	}
@@ -484,7 +488,7 @@ func (c *Client) EXISTS(key string) (bool, error) {
 }
 
 // ZADD is for
-func (c *Client) ZADD(name string, score float64, member interface{}) error {
+func (c *Client) ZADD(ctx context.Context, name string, score float64, member interface{}) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
@@ -492,126 +496,126 @@ func (c *Client) ZADD(name string, score float64, member interface{}) error {
 		Score:  score,
 		Member: member,
 	}
-	return c.Cc.ZAdd(name, tmp).Err()
+	return c.Cc.ZAdd(ctx, name, tmp).Err()
 }
 
 // ZRevRangeByScore is for
-func (c *Client) ZRevRangeByScore(key, min, max string, count int64) ([]string, error) {
+func (c *Client) ZRevRangeByScore(ctx context.Context, key, min, max string, count int64) ([]string, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	opt := redis.ZRangeBy{
+	opt := &redis.ZRangeBy{
 		Min:   min,
 		Max:   max,
 		Count: count,
 	}
-	return c.Cc.ZRevRangeByScore(key, opt).Result()
+	return c.Cc.ZRevRangeByScore(ctx, key, opt).Result()
 }
 
 // ZRANGE is for
-func (c *Client) ZRANGE(key string, start int64, stop int64) ([]string, error) {
+func (c *Client) ZRANGE(ctx context.Context, key string, start int64, stop int64) ([]string, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.ZRange(key, start, stop).Result()
+	return c.Cc.ZRange(ctx, key, start, stop).Result()
 }
 
 // ZREM is for
-func (c *Client) ZREM(name string, member string) error {
+func (c *Client) ZREM(ctx context.Context, name string, member string) error {
 	if c == nil || c.Cc == nil {
 		return fmt.Errorf("redis not init ")
 	}
-	return c.Cc.ZRem(name, member).Err()
+	return c.Cc.ZRem(ctx, name, member).Err()
 }
 
 // ZPOPMIN is for
-func (c *Client) ZPOPMIN(key string) ([]redis.Z, error) {
+func (c *Client) ZPOPMIN(ctx context.Context, key string) ([]redis.Z, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.ZPopMin(key).Result()
+	return c.Cc.ZPopMin(ctx, key).Result()
 }
 
 // ZPOPMAX is for
-func (c *Client) ZPOPMAX(key string) ([]redis.Z, error) {
+func (c *Client) ZPOPMAX(ctx context.Context, key string) ([]redis.Z, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.ZPopMax(key).Result()
+	return c.Cc.ZPopMax(ctx, key).Result()
 }
 
-func (c *Client) ScriptLoad(script string) (string, error) {
+func (c *Client) ScriptLoad(ctx context.Context, script string) (string, error) {
 	if c == nil || c.Cc == nil {
 		return "", fmt.Errorf("redis not init ")
 	}
-	return c.Cc.ScriptLoad(script).Result()
+	return c.Cc.ScriptLoad(ctx, script).Result()
 }
-func (c *Client) ScriptExists(sha ...string) ([]bool, error) {
+func (c *Client) ScriptExists(ctx context.Context, sha ...string) ([]bool, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.ScriptExists(sha...).Result()
+	return c.Cc.ScriptExists(ctx, sha...).Result()
 }
 
-func (c *Client) EvalSha(sha1 string, keys []string, args ...interface{}) (interface{}, error) {
+func (c *Client) EvalSha(ctx context.Context, sha1 string, keys []string, args ...interface{}) (interface{}, error) {
 	if c == nil || c.Cc == nil {
 		return "", fmt.Errorf("redis not init ")
 	}
-	return c.Cc.EvalSha(sha1, keys, args...).Result()
+	return c.Cc.EvalSha(ctx, sha1, keys, args...).Result()
 }
 
-func (c *Client) Eval(script string, keys []string, args ...interface{}) (interface{}, error) {
+func (c *Client) Eval(ctx context.Context, script string, keys []string, args ...interface{}) (interface{}, error) {
 	if c == nil || c.Cc == nil {
 		return "", fmt.Errorf("redis not init ")
 	}
-	return c.Cc.Eval(script, keys, args...).Result()
+	return c.Cc.Eval(ctx, script, keys, args...).Result()
 }
 
 // INCR is for
-func (c *Client) INCR(key string, value int64) (int64, error) {
+func (c *Client) INCR(ctx context.Context, key string, value int64) (int64, error) {
 	if c == nil || c.Cc == nil {
 		return 0, fmt.Errorf("redis not init ")
 	}
-	return c.Cc.IncrBy(key, value).Result()
+	return c.Cc.IncrBy(ctx, key, value).Result()
 }
 
-func (c *Client) HINCR(key string, feild string, value int64) (int64, error) {
+func (c *Client) HINCR(ctx context.Context, key string, feild string, value int64) (int64, error) {
 	if c == nil || c.Cc == nil {
 		return 0, fmt.Errorf("redis not init ")
 	}
-	if r := c.Cc.HIncrBy(key, feild, value); r != nil {
+	if r := c.Cc.HIncrBy(ctx, key, feild, value); r != nil {
 		return r.Result()
 	}
 
 	return 0, fmt.Errorf("result is nil")
 }
 
-func (c *Client) HINCRFLOAT(key string, feild string, value float64) (float64, error) {
+func (c *Client) HINCRFLOAT(ctx context.Context, key string, feild string, value float64) (float64, error) {
 	if c == nil || c.Cc == nil {
 		return 0, fmt.Errorf("redis not init ")
 	}
-	if r := c.Cc.HIncrByFloat(key, feild, value); r != nil {
+	if r := c.Cc.HIncrByFloat(ctx, key, feild, value); r != nil {
 		return r.Result()
 	}
 
 	return 0, fmt.Errorf("result is nil")
 }
 
-func (c *Client) HKEYS(key string) ([]string, error) {
+func (c *Client) HKEYS(ctx context.Context, key string) ([]string, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	if r := c.Cc.HKeys(key); r != nil {
+	if r := c.Cc.HKeys(ctx, key); r != nil {
 		return r.Result()
 	}
 	return nil, fmt.Errorf("result is nil")
 }
 
-func (c *Client) KEYS(key string) ([]string, error) {
+func (c *Client) KEYS(ctx context.Context, key string) ([]string, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	if r := c.Cc.Keys(key); r != nil {
+	if r := c.Cc.Keys(ctx, key); r != nil {
 		return r.Result()
 	}
 	return nil, fmt.Errorf("result is nil")
