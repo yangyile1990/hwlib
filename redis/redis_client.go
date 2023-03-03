@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"sync"
 	"time"
 
@@ -20,17 +19,20 @@ import (
 var instanceMap = make(map[string]*Client)
 var redis_lock sync.RWMutex
 
-func createTLSConfiguration(certFile string, keyFile string, caFile string, skip bool) (t *tls.Config) {
-	t = &tls.Config{
-		InsecureSkipVerify: skip,
+func createTLSConfiguration(cfg *TlsCfg) (t *tls.Config) {
+	if cfg == nil {
+		return nil
 	}
-	if certFile != "" && keyFile != "" && caFile != "" {
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	t = &tls.Config{
+		InsecureSkipVerify: cfg.Skip,
+	}
+	if cfg.CertFile != "" && cfg.KeyFile != "" && cfg.CaFile != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		caCert, err := os.ReadFile(caFile)
+		caCert, err := os.ReadFile(cfg.CaFile)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -41,7 +43,7 @@ func createTLSConfiguration(certFile string, keyFile string, caFile string, skip
 		t = &tls.Config{
 			Certificates:       []tls.Certificate{cert},
 			RootCAs:            caCertPool,
-			InsecureSkipVerify: skip,
+			InsecureSkipVerify: cfg.Skip,
 		}
 	}
 	return t
@@ -49,7 +51,7 @@ func createTLSConfiguration(certFile string, keyFile string, caFile string, skip
 
 // Client is for
 type Client struct {
-	Cc  *redis.Client
+	Cc  redis.Cmdable
 	log logger.Logger
 }
 
@@ -63,10 +65,13 @@ type TlsCfg struct {
 	// certFile string, keyFile string, caFile string, skip bool
 }
 type RedisCfg struct {
-	UserName string  `json:"user_name"`
-	Host     string  `json:"host"`
-	Port     int     `json:"port"`
-	Dbname   int     `json:"dbname"`
+	IsCluster bool   `json:"is_cluster"`
+	DbIdx     int    `json:"db_idx"`
+	UserName  string `json:"user_name"`
+	Url       []struct {
+		Host string `json:"host"`
+		Port int    `json:"port"`
+	} `json:"url"`
 	PassWord string  `json:"pwd"`
 	TlsCfg   *TlsCfg `json:"tls"`
 }
@@ -80,29 +85,34 @@ func GetInstance(log logger.Logger, cfg *RedisCfg) (*Client, error) {
 	}
 	var tls *tls.Config
 	if cfg.TlsCfg != nil {
-		tls = createTLSConfiguration(cfg.TlsCfg.CertFile, cfg.TlsCfg.KeyFile, cfg.TlsCfg.CertFile, cfg.TlsCfg.Skip)
-		tls.ServerName = cfg.Host
+		tls = createTLSConfiguration(cfg.TlsCfg)
 	}
 	if key, err := json.Marshal(cfg); err == nil {
 		redis_lock.RLock()
 		r := instanceMap[string(key)]
 		redis_lock.RUnlock()
 		if r == nil {
-			var rdb *redis.Client
-			if tls != nil {
+			var rdb redis.Cmdable
+			if cfg.IsCluster {
+				opt := &redis.ClusterOptions{
+					Username:  cfg.UserName,
+					Password:  cfg.PassWord,
+					TLSConfig: tls,
+				}
+				for _, val := range cfg.Url {
+					opt.Addrs = append(opt.Addrs, fmt.Sprintf("%s:%d", val.Host, val.Port))
+				}
+				rdb = redis.NewClusterClient(opt)
+			} else {
+				if len(cfg.Url) != 1 {
+					return nil, fmt.Errorf("not cluster client need len(url)=1")
+				}
 				rdb = redis.NewClient(&redis.Options{
-					Addr:      cfg.Host + ":" + strconv.Itoa(cfg.Port),
+					Addr:      fmt.Sprintf("%s:%d", cfg.Url[0].Host, cfg.Url[0].Port),
 					Username:  cfg.UserName,
 					Password:  cfg.PassWord, // no password set
-					DB:        cfg.Dbname,   // use default DB
+					DB:        cfg.DbIdx,    // use default DB
 					TLSConfig: tls,
-				})
-			} else {
-				rdb = redis.NewClient(&redis.Options{
-					Addr:     cfg.Host + ":" + strconv.Itoa(cfg.Port),
-					Username: cfg.UserName,
-					Password: cfg.PassWord, // no password set
-					DB:       cfg.Dbname,   // use default DB
 				})
 			}
 			errors := rdb.Ping(context.Background()).Err()
@@ -370,39 +380,11 @@ func (c *Client) XACK(ctx context.Context, stream, group string, ids ...string) 
 }
 
 // XINFO_GROUPS is for get stream group info
-func (c *Client) XINFO_GROUPS(ctx context.Context, stream string) (*map[string]map[string]interface{}, error) {
+func (c *Client) XINFO_GROUPS(ctx context.Context, stream string) ([]redis.XInfoGroup, error) {
 	if c == nil || c.Cc == nil {
 		return nil, fmt.Errorf("redis not init ")
 	}
-	args := []interface{}{"xinfo", "groups"}
-	args = append(args, stream)
-	cmd := redis.NewSliceCmd(ctx, args...)
-	err := c.Cc.Process(ctx, cmd)
-	if err != nil {
-		return nil, err
-	}
-	res, err := cmd.Result()
-	if err != nil {
-		return nil, err
-	}
-	output := make(map[string]map[string]interface{})
-	for _, v := range res {
-		sliceV, ok := v.([]interface{})
-		if !ok {
-			return nil, fmt.Errorf("convert type error ")
-		}
-		tmp := make(map[string]interface{})
-		tmp["consumers"] = sliceV[3]
-		tmp["pending"] = sliceV[5]
-		tmp["last-delivered-id"] = sliceV[7]
-
-		keyStr, ok := sliceV[1].(string)
-		if !ok {
-			return nil, fmt.Errorf("convert type error ")
-		}
-		output[keyStr] = tmp
-	}
-	return &output, nil
+	return c.Cc.XInfoGroups(ctx, stream).Result()
 }
 
 // XCLAIM reclaim pending message to target consumer.
