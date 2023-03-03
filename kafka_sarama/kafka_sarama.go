@@ -172,6 +172,8 @@ type Handler func(topic string, partition int32, offset int64, msg []byte) error
 type topicHandler struct {
 	h Handler
 	sarama.ConsumerGroup
+	cancel context.CancelFunc
+	sync.Once
 }
 
 func (c *comsumer) SubscribeTopics(topic []string, h Handler) error {
@@ -192,22 +194,42 @@ func (c *comsumer) SubscribeTopics(topic []string, h Handler) error {
 		if err != nil {
 			return err
 		}
-		go func() {
-			for err := range group_client.Errors() {
-				if c.log != nil {
-					c.log.Error(KafkaSaramaTag, "err", err)
-				}
-			}
-		}()
-		go func(t []string, cli sarama.ConsumerGroup) {
+		newCtx, cancleFun := context.WithCancel(c.Context)
+		th := &topicHandler{h: h, ConsumerGroup: group_client, cancel: cancleFun}
+		//输出错误
+		go func(ctx context.Context, topH *topicHandler) {
 			for {
-				err := cli.Consume(c.Context, t, c)
+				select {
+				case <-ctx.Done():
+					topH.Once.Do(func() {
+						topH.Close()
+					})
+					return
+				case err := <-group_client.Errors():
+					if c.log != nil {
+						c.log.Error(KafkaSaramaTag, "err", err)
+					}
+				}
+			}
+		}(newCtx, th)
+		//消费消息
+		go func(t []string, ctx context.Context, topH *topicHandler) {
+			for {
+				select {
+				case <-ctx.Done():
+					topH.Once.Do(func() {
+						topH.Close()
+					})
+					return
+				default:
+				}
+				err := topH.Consume(c.Context, t, c)
 				if c.log != nil {
 					c.log.Error(KafkaSaramaTag, "err", err)
 				}
 			}
-		}(topic, group_client)
-		c.topics.Store(str, &topicHandler{h: h, ConsumerGroup: group_client})
+		}(topic, newCtx, th)
+		c.topics.Store(str, th)
 	}
 	return nil
 }
@@ -215,8 +237,11 @@ func (c *comsumer) SubscribeTopics(topic []string, h Handler) error {
 func (c *comsumer) Close(topic string) error {
 	cli, ok := c.topics.Load(topic)
 	if ok {
-		t, ok := cli.(sarama.ConsumerGroup)
+		t, ok := cli.(*topicHandler)
 		if ok {
+			t.Once.Do(func() {
+				t.cancel()
+			})
 			return t.Close()
 		}
 		return fmt.Errorf("cant conver to ConsumerGroup")
