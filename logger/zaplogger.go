@@ -38,13 +38,15 @@ var logger_lock sync.RWMutex
         "level": 0
 */
 
-//获取一个默认log 对象 用于不是项目内部的打印 默认路径是./log
-// func GetDefaultInstance() (*StdLogger, error) {
-// 	return GetInstance("default_log_instance", defaultCfg)
-// 	// return log,err
-// }
-
-func GetInstance(tag string, cfg []*LoggerCfg) (*StdLogger, error) {
+// 获取一个默认log 对象 用于不是项目内部的打印 默认路径是./log
+//
+//	func GetDefaultInstance() (*StdLogger, error) {
+//		return GetInstance("default_log_instance", defaultCfg)
+//		// return log,err
+//	}
+//
+// skipCall打印调用关系的堆栈
+func GetInstance(tag string, cfg []*LoggerCfg, skipCall int) (*StdLogger, error) {
 	if cfg == nil || len(cfg) <= 0 {
 		return nil, fmt.Errorf("logger cfg is err")
 	}
@@ -68,7 +70,8 @@ func GetInstance(tag string, cfg []*LoggerCfg) (*StdLogger, error) {
 			}
 		}
 		handler := zapcore.NewTee(cores...)
-		zaplogger := zap.New(handler, zap.AddCaller(), zap.WithCaller(false)) //不打印堆栈
+		// opt := []zap.Option{zap.AddCaller()}
+		zaplogger := zap.New(handler, zap.AddCaller(), zap.AddCallerSkip(skipCall)) //不打印堆栈
 		sugarLogger := zaplogger.Sugar()
 		instance = &StdLogger{
 			logger: sugarLogger,
@@ -81,7 +84,7 @@ func GetInstance(tag string, cfg []*LoggerCfg) (*StdLogger, error) {
 }
 
 // NewStdLogger is
-func NewStdLogger() *StdLogger {
+func NewStdLogger(callerSkip int) *StdLogger {
 	if instance == nil {
 		once.Do(func() {
 			writeSyncer := getLogWriter()
@@ -89,7 +92,7 @@ func NewStdLogger() *StdLogger {
 			cores := make([]zapcore.Core, 0)
 			cores = append(cores, zapcore.NewCore(encoder, writeSyncer, zapcore.DebugLevel))
 			handler := zapcore.NewTee(cores...)
-			zaplogger := zap.New(handler, zap.AddCaller(), zap.AddCallerSkip(1)) //修改堆栈深度
+			zaplogger := zap.New(handler, zap.AddCaller(), zap.AddCallerSkip(callerSkip)) //修改堆栈深度
 			sugarLogger := zaplogger.Sugar()
 			instance = &StdLogger{
 				logger: sugarLogger,

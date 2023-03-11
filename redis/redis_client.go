@@ -81,7 +81,7 @@ func GetInstance(log logger.Logger, cfg *RedisCfg) (*Client, error) {
 		return nil, fmt.Errorf("is nil")
 	}
 	if log == nil {
-		log = logger.NewStdLogger()
+		log = logger.NewStdLogger(2)
 	}
 	var tls *tls.Config
 	if cfg.TlsCfg != nil {
